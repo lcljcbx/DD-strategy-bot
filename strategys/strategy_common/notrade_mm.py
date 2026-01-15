@@ -432,7 +432,8 @@ def close_position_if_exists(adapter, symbol):
             # 然后市价平仓
             print("市价平仓中...")
             adapter.close_position(symbol, order_type="market")
-            print("平仓完成")
+            print("平仓完成，进入休眠 300 秒以避免立即重新建仓...")
+            time.sleep(300)
         # 如果 position 为 None，说明 StandX 适配器的持仓查询接口可能未实现
     except Exception as e:
         # 如果持仓查询失败，静默处理（StandX 可能没有持仓查询接口）
