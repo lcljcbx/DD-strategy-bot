@@ -9,6 +9,18 @@ import time
 import random
 import argparse
 from decimal import Decimal
+from datetime import datetime
+
+# 时区处理：优先使用 zoneinfo（Python 3.9+），否则使用 pytz
+try:
+    from zoneinfo import ZoneInfo
+    HAS_ZONEINFO = True
+except ImportError:
+    try:
+        import pytz
+        HAS_ZONEINFO = False
+    except ImportError:
+        raise ImportError("需要安装 pytz 库来处理时区（pip install pytz），或使用 Python 3.9+")
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(os.path.dirname(current_dir))
@@ -454,6 +466,79 @@ def close_position_if_exists(adapter, symbol):
         pass
 
 
+def is_high_volatility_period(timezone_str="Asia/Shanghai"):
+    """检查当前时间是否处于高波动时间段（美股开盘前后）
+    
+    高波动时间段（基于指定时区）：
+    - 周一到周五的早上 3:30-7:30（对应美股收盘前后）
+    - 周一到周五的晚上 22:00-23:00（对应美股开盘前后）
+    
+    Args:
+        timezone_str: 时区字符串，默认为 "Asia/Shanghai"（北京时间）
+                     常见时区：Asia/Shanghai（北京时间）、UTC、America/New_York（美东时间）等
+    
+    Returns:
+        bool: 如果在高波动时间段返回 True，否则返回 False
+    """
+    # 获取指定时区的当前时间
+    if HAS_ZONEINFO:
+        tz = ZoneInfo(timezone_str)
+        now = datetime.now(tz)
+    else:
+        tz = pytz.timezone(timezone_str)
+        now = datetime.now(tz)
+    
+    weekday = now.weekday()  # 0=Monday, 6=Sunday
+    hour = now.hour
+    minute = now.minute
+    current_time_minutes = hour * 60 + minute
+    
+    # 只处理周一到周五（0-4）
+    if weekday >= 5:  # 周六、周日
+        return False
+    
+    # 早上 3:30-7:30（210-450 分钟）
+    morning_start = 3 * 60 + 30  # 3:30 = 210 分钟
+    morning_end = 7 * 60 + 30    # 7:30 = 450 分钟
+    
+    # 晚上 22:00-23:00（1320-1380 分钟）
+    evening_start = 22 * 60     # 22:00 = 1320 分钟
+    evening_end = 23 * 60       # 23:00 = 1380 分钟
+    
+    if (morning_start <= current_time_minutes < morning_end) or \
+       (evening_start <= current_time_minutes < evening_end):
+        return True
+    
+    return False
+
+
+def get_time_based_price_spread(base_spread, high_volatility_spread, price_spread_mode="percent", timezone_str="Asia/Shanghai"):
+    """根据时间段获取价差
+    
+    Args:
+        base_spread: 基础价差（正常时间段使用）
+        high_volatility_spread: 高波动时间段使用的价差
+        price_spread_mode: 价差模式
+        timezone_str: 时区字符串，默认为 "Asia/Shanghai"（北京时间）
+    
+    Returns:
+        float: 根据时间段调整后的价差
+    """
+    if is_high_volatility_period(timezone_str):
+        spread = high_volatility_spread
+        period_name = "高波动时间段"
+    else:
+        spread = base_spread
+        period_name = "正常时间段"
+    
+    if price_spread_mode == "percent":
+        print(f"[时间段调整] {period_name} (时区: {timezone_str}), price_spread: {spread:.6f} ({spread*100:.4f}%)")
+    else:
+        print(f"[时间段调整] {period_name} (时区: {timezone_str}), price_spread: {spread}")
+    
+    return spread
+
+
 def calculate_dynamic_price_spread(adx, current_price, default_spread, adx_threshold, adx_max=60, price_spread_mode="fixed"):
     """根据 ADX 值动态计算 price_spread
     
@@ -511,8 +596,19 @@ def run_strategy_cycle(adapter):
     print(f"{SYMBOL} 价格: {last_price:.2f}")
 
     # 获取 ADX 指标并动态调整 price_spread
-    default_spread = GRID_CONFIG['price_spread']
     price_spread_mode = GRID_CONFIG.get('price_spread_mode', 'fixed')  # 默认使用固定价差模式
+    
+    # 根据时间段调整基础价差
+    base_spread = GRID_CONFIG['price_spread']
+    time_based_config = GRID_CONFIG.get('time_based_spread', {})
+    
+    if time_based_config.get('enable', False) and price_spread_mode == 'percent':
+        # 启用时间段价差调整功能（仅百分比模式）
+        high_volatility_spread = time_based_config.get('high_volatility_spread', 0.09)
+        timezone_str = time_based_config.get('timezone', 'Asia/Shanghai')  # 默认使用北京时间
+        default_spread = get_time_based_price_spread(base_spread, high_volatility_spread, price_spread_mode, timezone_str)
+    else:
+        default_spread = base_spread
     
     if RISK_CONFIG.get('enable', False):
         indicator_tool = IndicatorTool()
