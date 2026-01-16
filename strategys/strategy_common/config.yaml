@@ -18,7 +18,8 @@ grid:
   lower_price: 60000
   price_step: 5
   grid_count: 5
-  price_spread: 50
+  price_spread: 0.0008  # 固定价差模式下的价差值，或百分比模式下的百分比值（如 0.001 表示 0.1%）
+  price_spread_mode: percent  # 价差模式: "fixed" 表示固定价差（price_spread 为价格差值），"percent" 表示百分比价差（price_spread 为百分比值，如 0.001 表示 0.1%）
   order_quantity: 0.002
   sleep_interval: 1
 

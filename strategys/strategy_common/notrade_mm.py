@@ -137,8 +137,16 @@ def initialize_config(config_file="config.yaml", active_exchange_override=None):
     CANCEL_STALE_ORDERS_CONFIG = config.get('cancel_stale_orders', {})
 
 
-def generate_grid_arrays(current_price, price_step, grid_count, price_spread):
-    """根据当前价格和价格间距生成做多数组和做空数组，过滤超过当前价格上下1%的价格"""
+def generate_grid_arrays(current_price, price_step, grid_count, price_spread, price_spread_mode="fixed"):
+    """根据当前价格和价格间距生成做多数组和做空数组，过滤超过当前价格上下1%的价格
+    
+    Args:
+        current_price: 当前价格
+        price_step: 价格步长
+        grid_count: 网格数量
+        price_spread: 价差值
+        price_spread_mode: 价差模式，"fixed" 表示固定价差，"percent" 表示百分比价差
+    """
     if price_step <= 0:
         raise ValueError("price_step 必须大于 0")
     if grid_count < 0:
@@ -150,9 +158,15 @@ def generate_grid_arrays(current_price, price_step, grid_count, price_spread):
     price_upper_limit = current_price * 1.01  # 上限：当前价格 +1%
     price_lower_limit = current_price * 0.99   # 下限：当前价格 -1%
     
-    # 计算 bid 和 ask 价格
-    bid_price = current_price - price_spread
-    ask_price = current_price + price_spread
+    # 根据价差模式计算 bid 和 ask 价格
+    if price_spread_mode == "percent":
+        # 百分比模式：price_spread 是百分比值（如 0.001 表示 0.1%）
+        bid_price = current_price * (1 - price_spread)
+        ask_price = current_price * (1 + price_spread)
+    else:
+        # 固定价差模式：price_spread 是固定的价格差值
+        bid_price = current_price - price_spread
+        ask_price = current_price + price_spread
     
     # 将 bid 价格向下取整到最近的 price_step 倍数
     bid_base = int(bid_price / price_step) * price_step
@@ -440,7 +454,7 @@ def close_position_if_exists(adapter, symbol):
         pass
 
 
-def calculate_dynamic_price_spread(adx, current_price, default_spread, adx_threshold, adx_max=60):
+def calculate_dynamic_price_spread(adx, current_price, default_spread, adx_threshold, adx_max=60, price_spread_mode="fixed"):
     """根据 ADX 值动态计算 price_spread
     
     Args:
@@ -449,11 +463,17 @@ def calculate_dynamic_price_spread(adx, current_price, default_spread, adx_thres
         default_spread: 默认 price_spread
         adx_threshold: ADX 阈值，低于此值使用默认值（通常为25）
         adx_max: ADX 最大值，超过此值按此值处理（默认60）
+        price_spread_mode: 价差模式，"fixed" 表示固定价差，"percent" 表示百分比价差
     
     Returns:
-        int: 计算后的 price_spread
+        float: 计算后的 price_spread
     """
-    max_spread = current_price * 0.01  # 最大为价格的1%
+    if price_spread_mode == "percent":
+        # 百分比模式：最大为价格的1%（0.01）
+        max_spread = 0.01
+    else:
+        # 固定价差模式：最大为价格的1%
+        max_spread = current_price * 0.01
     
     if adx is not None:
         print(f"ADX(5m): {adx:.2f}")
@@ -466,8 +486,14 @@ def calculate_dynamic_price_spread(adx, current_price, default_spread, adx_thres
             # ADX 在 [threshold, 60] 范围内映射到 [默认值, 最大值]
             ratio = (effective_adx - adx_threshold) / (adx_max - adx_threshold)  # ADX 25-60 映射到 0-1
             dynamic_spread = default_spread + ratio * (max_spread - default_spread)
-            price_spread = int(min(dynamic_spread, max_spread))
-        print(f"动态 price_spread: {price_spread} (默认: {default_spread}, 最大: {int(max_spread)})")
+            price_spread = min(dynamic_spread, max_spread)
+            if price_spread_mode == "fixed":
+                price_spread = int(price_spread)
+        
+        if price_spread_mode == "percent":
+            print(f"动态 price_spread: {price_spread:.6f} ({price_spread*100:.4f}%) (默认: {default_spread:.6f} ({default_spread*100:.4f}%), 最大: {max_spread:.6f} ({max_spread*100:.4f}%))")
+        else:
+            print(f"动态 price_spread: {price_spread} (默认: {default_spread}, 最大: {int(max_spread)})")
         return price_spread
     else:
         print(f"ADX(5m): 获取失败，使用默认 price_spread: {default_spread}")
@@ -486,6 +512,7 @@ def run_strategy_cycle(adapter):
 
     # 获取 ADX 指标并动态调整 price_spread
     default_spread = GRID_CONFIG['price_spread']
+    price_spread_mode = GRID_CONFIG.get('price_spread_mode', 'fixed')  # 默认使用固定价差模式
     
     if RISK_CONFIG.get('enable', False):
         indicator_tool = IndicatorTool()
@@ -493,7 +520,7 @@ def run_strategy_cycle(adapter):
         adx = indicator_tool.get_adx(adx_symbol, "5m", period=14)
         adx_threshold = RISK_CONFIG.get('adx_threshold', 25)
         adx_max = RISK_CONFIG.get('adx_max', 60)
-        price_spread = calculate_dynamic_price_spread(adx, last_price, default_spread, adx_threshold, adx_max)
+        price_spread = calculate_dynamic_price_spread(adx, last_price, default_spread, adx_threshold, adx_max, price_spread_mode)
     else:
         price_spread = default_spread
     
@@ -501,7 +528,8 @@ def run_strategy_cycle(adapter):
         last_price, 
         GRID_CONFIG['price_step'], 
         GRID_CONFIG['grid_count'],
-        price_spread
+        price_spread,
+        price_spread_mode
     )
     print(f"做多数组: {long_grid}")
     print(f"做空数组: {short_grid}")

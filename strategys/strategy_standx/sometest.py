@@ -4,6 +4,7 @@ def some():
     print("some")
     print("平仓完成，进入休眠 5 秒以避免立即重新建仓...")
     time.sleep(5)
+    print("some 结束")
     
 
 def main():
