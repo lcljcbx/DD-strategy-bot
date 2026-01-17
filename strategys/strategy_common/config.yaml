@@ -17,14 +17,14 @@ grid:
   upper_price: 200000
   lower_price: 60000
   price_step: 5
-  grid_count: 5
+  grid_count: 4
   price_spread: 0.0008  # 固定价差模式下的价差值，或百分比模式下的百分比值（如 0.001 表示 0.1%）
   price_spread_mode: percent  # 价差模式: "fixed" 表示固定价差（price_spread 为价格差值），"percent" 表示百分比价差（price_spread 为百分比值，如 0.001 表示 0.1%）
-  order_quantity: 0.002
+  order_quantity: 0.025
   sleep_interval: 1
   time_based_spread:  # 时间段价差调整配置（仅在百分比模式下生效）
     enable: true  # 是否启用时间段价差调整
-    high_volatility_spread: 0.09  # 高波动时间段使用的价差（0.09 表示 0.9%），时间段：周一到周五 3:30-7:30 和 22:00-23:00
+    high_volatility_spread: 0.0025  # 高波动时间段使用的价差（0.0025 表示 0.25%），时间段：周一到周六 0:00-8:00 和 22:00-24:00
     timezone: Asia/Shanghai  # 时区设置，用于判断时间段。常见时区：Asia/Shanghai（北京时间）、UTC、America/New_York（美东时间）、America/Los_Angeles（美西时间）等
 
 risk:

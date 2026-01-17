@@ -467,11 +467,11 @@ def close_position_if_exists(adapter, symbol):
 
 
 def is_high_volatility_period(timezone_str="Asia/Shanghai"):
-    """检查当前时间是否处于高波动时间段（美股开盘前后）
+    """检查当前时间是否处于高波动时间段
     
     高波动时间段（基于指定时区）：
-    - 周一到周五的早上 3:30-7:30（对应美股收盘前后）
-    - 周一到周五的晚上 22:00-23:00（对应美股开盘前后）
+    - 周一到周六的 0:00-8:00
+    - 周一到周六的 22:00-24:00（即 22:00 到当天结束）
     
     Args:
         timezone_str: 时区字符串，默认为 "Asia/Shanghai"（北京时间）
@@ -493,17 +493,17 @@ def is_high_volatility_period(timezone_str="Asia/Shanghai"):
     minute = now.minute
     current_time_minutes = hour * 60 + minute
     
-    # 只处理周一到周五（0-4）
-    if weekday >= 5:  # 周六、周日
+    # 只处理周一到周六（0-5）
+    if weekday > 5:  # 周日
         return False
     
-    # 早上 3:30-7:30（210-450 分钟）
-    morning_start = 3 * 60 + 30  # 3:30 = 210 分钟
-    morning_end = 7 * 60 + 30    # 7:30 = 450 分钟
+    # 早上 0:00-8:00（0-480 分钟）
+    morning_start = 0 * 60      # 0:00 = 0 分钟
+    morning_end = 8 * 60        # 8:00 = 480 分钟
     
-    # 晚上 22:00-23:00（1320-1380 分钟）
+    # 晚上 22:00-24:00（1320-1440 分钟，即 22:00 到当天结束）
     evening_start = 22 * 60     # 22:00 = 1320 分钟
-    evening_end = 23 * 60       # 23:00 = 1380 分钟
+    evening_end = 24 * 60       # 24:00 = 1440 分钟（实际上到 23:59:59）
     
     if (morning_start <= current_time_minutes < morning_end) or \
        (evening_start <= current_time_minutes < evening_end):
@@ -604,7 +604,7 @@ def run_strategy_cycle(adapter):
     
     if time_based_config.get('enable', False) and price_spread_mode == 'percent':
         # 启用时间段价差调整功能（仅百分比模式）
-        high_volatility_spread = time_based_config.get('high_volatility_spread', 0.09)
+        high_volatility_spread = time_based_config.get('high_volatility_spread', 0.0025)
         timezone_str = time_based_config.get('timezone', 'Asia/Shanghai')  # 默认使用北京时间
         default_spread = get_time_based_price_spread(base_spread, high_volatility_spread, price_spread_mode, timezone_str)
     else:
