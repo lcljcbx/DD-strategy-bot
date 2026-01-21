@@ -504,9 +504,9 @@ def is_high_volatility_period(timezone_str="Asia/Shanghai"):
     if weekday > 5:  # 周日
         return False
     
-    # 早上 0:00-8:00（0-480 分钟）
+    # 早上 0:00-9:00（0-480 分钟）
     morning_start = 0 * 60      # 0:00 = 0 分钟
-    morning_end = 8 * 60        # 8:00 = 480 分钟
+    morning_end = 9 * 60        # 9:00 = 540 分钟
     
     # 晚上 22:00-24:00（1320-1440 分钟，即 22:00 到当天结束）
     evening_start = 22 * 60     # 22:00 = 1320 分钟
