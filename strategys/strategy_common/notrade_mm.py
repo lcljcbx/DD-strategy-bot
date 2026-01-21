@@ -8,6 +8,7 @@ import yaml
 import time
 import random
 import argparse
+import threading
 from decimal import Decimal
 from datetime import datetime
 
@@ -438,32 +439,38 @@ def calculate_place_orders(target_long, target_short, current_long, current_shor
     return sorted(place_long), sorted(place_short)
 
 
-def close_position_if_exists(adapter, symbol):
-    """检查持仓，如果有持仓则市价平仓
-    
-    注意: StandX 适配器的持仓查询接口可能未实现，此功能可能无法使用
-    
-    Args:
-        adapter: 适配器实例
-        symbol: 交易对符号
-    """
-    try:
-        positions = adapter.get_positions(symbol)
-        # get_positions 返回列表，取第一个持仓
-        position = positions[0] if positions else None
-        if position and position.size != Decimal("0"):
-            print(f"检测到持仓: {position.size} {position.side}")
-            print("取消所有未成交订单...")
-            adapter.cancel_all_orders(symbol=symbol)
-            # 然后市价平仓
-            print("市价平仓中...")
-            adapter.close_position(symbol, order_type="market")
-            print("平仓完成，进入休眠 300 秒以避免立即重新建仓...")
-            time.sleep(300)
-        # 如果 position 为 None，说明 StandX 适配器的持仓查询接口可能未实现
-    except Exception as e:
-        # 如果持仓查询失败，静默处理（StandX 可能没有持仓查询接口）
-        pass
+def position_monitor_loop(adapter, symbol, check_interval_seconds=1):
+    """后台线程：每秒检查一次持仓，有持仓则市价平掉"""
+    while True:
+        try:
+            positions = adapter.get_positions(symbol)
+            position = positions[0] if positions else None
+            if position and position.size != Decimal("0"):
+                print(f"[监控] 检测到持仓: {position.size} {position.side}")
+                print("[监控] 取消所有未成交订单...")
+                adapter.cancel_all_orders(symbol=symbol)
+                print("[监控] 市价平仓中...")
+                adapter.close_position(symbol, order_type="market")
+            time.sleep(check_interval_seconds)
+        except Exception:
+            # 任何异常都等待一秒再继续，避免线程退出
+            time.sleep(check_interval_seconds)
+
+
+POSITION_MONITOR_THREAD = None
+
+
+def start_position_monitor(adapter, symbol, check_interval_seconds=1):
+    """启动持仓监控线程，仅启动一次"""
+    global POSITION_MONITOR_THREAD
+    if POSITION_MONITOR_THREAD and POSITION_MONITOR_THREAD.is_alive():
+        return
+    POSITION_MONITOR_THREAD = threading.Thread(
+        target=position_monitor_loop,
+        args=(adapter, symbol, check_interval_seconds),
+        daemon=True
+    )
+    POSITION_MONITOR_THREAD.start()
 
 
 def is_high_volatility_period(timezone_str="Asia/Shanghai"):
@@ -664,8 +671,12 @@ def run_strategy_cycle(adapter):
     place_orders_by_prices(
         place_long, place_short, adapter, SYMBOL, GRID_CONFIG.get('order_quantity', 0.001)
     )
-    # 检查持仓，如果有持仓则市价平仓
-    close_position_if_exists(adapter, SYMBOL)
+    # 检测到持仓休眠300秒
+    positions = adapter.get_positions(symbol)
+    position = positions[0] if positions else None
+    if position and position.size != Decimal("0"):
+        print("进入休眠 300 秒以避免立即重新建仓...")
+        time.sleep(300)
 
 
 def main():
@@ -700,6 +711,8 @@ def main():
     try:
         adapter = create_adapter(EXCHANGE_CONFIG)
         adapter.connect()
+        # 启动持仓监控线程，每秒检查一次
+        start_position_monitor(adapter, SYMBOL, check_interval_seconds=1)
         
         sleep_interval = GRID_CONFIG.get('sleep_interval', 60)
         
