@@ -672,7 +672,7 @@ def run_strategy_cycle(adapter):
         place_long, place_short, adapter, SYMBOL, GRID_CONFIG.get('order_quantity', 0.001)
     )
     # 检测到持仓休眠300秒
-    positions = adapter.get_positions(symbol)
+    positions = adapter.get_positions(SYMBOL)
     position = positions[0] if positions else None
     if position and position.size != Decimal("0"):
         print("进入休眠 300 秒以避免立即重新建仓...")
