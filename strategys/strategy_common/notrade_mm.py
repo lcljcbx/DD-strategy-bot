@@ -506,10 +506,10 @@ def is_high_volatility_period(timezone_str="Asia/Shanghai"):
     
     # 早上 0:00-9:00（0-480 分钟）
     morning_start = 0 * 60      # 0:00 = 0 分钟
-    morning_end = 9 * 60        # 9:00 = 540 分钟
+    morning_end = 10 * 60        # 10:00 = 600 分钟
     
     # 晚上 22:00-24:00（1320-1440 分钟，即 22:00 到当天结束）
-    evening_start = 20 * 60     # 20:00 = 1200 分钟
+    evening_start = 16 * 60     # 16:00 = 960 分钟
     evening_end = 24 * 60       # 24:00 = 1440 分钟（实际上到 23:59:59）
     
     if (morning_start <= current_time_minutes < morning_end) or \
