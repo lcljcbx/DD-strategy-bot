@@ -660,23 +660,30 @@ def run_strategy_cycle(adapter):
         cancel_probability = CANCEL_STALE_ORDERS_CONFIG.get('cancel_probability', 0.5)
         cancel_stale_order_ids(adapter, SYMBOL, stale_seconds, cancel_probability)
     
-    # 计算需要下单的数组
-    place_long, place_short = calculate_place_orders(
-        long_grid, short_grid, long_pending, short_pending
-    )
-    print(f"下单做多数组: {place_long}")
-    print(f"下单做空数组: {place_short}")
+    # 在下单前再次检查持仓，避免重复下单
+    positions = adapter.get_positions(SYMBOL)
+    position = positions[0] if positions else None
     
-    # 执行下单
-    place_orders_by_prices(
-        place_long, place_short, adapter, SYMBOL, GRID_CONFIG.get('order_quantity', 0.001)
-    )
-    # 检测到持仓休眠300秒
+    if position and position.size != Decimal("0"):
+        print(f"[策略循环] 检测到持仓 ({position.size})，跳过下单步骤")
+    else:
+        # 计算需要下单的数组
+        place_long, place_short = calculate_place_orders(
+            long_grid, short_grid, long_pending, short_pending
+        )
+        print(f"下单做多数组: {place_long}")
+        print(f"下单做空数组: {place_short}")
+        
+        # 执行下单
+        place_orders_by_prices(
+            place_long, place_short, adapter, SYMBOL, GRID_CONFIG.get('order_quantity', 0.001)
+        )
+    # 检测到持仓休眠900秒
     positions = adapter.get_positions(SYMBOL)
     position = positions[0] if positions else None
     if position and position.size != Decimal("0"):
-        print("进入休眠 300 秒以避免立即重新建仓...")
-        time.sleep(300)
+        print("进入休眠 900 秒以避免立即重新建仓...")
+        time.sleep(900)
 
 
 def main():
